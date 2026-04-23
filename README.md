@@ -69,12 +69,19 @@ The server reads JSONL files from `~/.claude/projects/` (or the path set in the 
 
 ### Process management (claude -p)
 - **`get_claude_p_executions`** — Get recent non-interactive `claude -p` sessions spawned by other Claude instances.
-- **`spawn_claude_process`** — Spawn a new `claude -p` process in background, returns immediately with a process ID.
+- **`spawn_claude_process`** — Spawn a new `claude -p` process in background, returns immediately with a process ID. `dangerouslySkipPermissions` defaults to **false** — pass `true` to opt in.
 - **`watch_processes`** — Get status of all running `claude -p` processes.
 - **`get_process_progress`** — Get real-time progress of a specific `claude -p` process.
 - **`get_process_output`** — Get the full output of a completed `claude -p` process.
 - **`kill_process`** — Kill a running `claude -p` process.
 - **`list_all_processes`** — List all processes (running and completed) with history.
+
+### Security defaults
+
+| Tool / Parameter | Default | Notes |
+|------------------|---------|-------|
+| `spawn_claude_process` → `dangerouslySkipPermissions` | `false` | Must be explicitly set to `true` to pass `--dangerously-skip-permissions` to claude |
+| `save_daily_report` → `date` | today | Must match `YYYY-MM-DD`; any other format (including traversal payloads) is rejected |
 
 ### Example: generate a work summary
 

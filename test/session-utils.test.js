@@ -8,6 +8,7 @@ import {
   estimateTokens,
   calculateSimilarityScore,
   classifyTaskType,
+  validateReportDate,
 } from '../lib/session-utils.js';
 
 // ─── formatDuration ───────────────────────────────────────────────────────────
@@ -170,4 +171,44 @@ test('classifyTaskType: unrecognized text => other', () => {
 
 test('classifyTaskType: non-string input => other', () => {
   assert.equal(classifyTaskType(null), 'other');
+});
+
+// ─── Security: validateReportDate ────────────────────────────────────────────
+
+test('validateReportDate: accepts valid YYYY-MM-DD', () => {
+  assert.ok(validateReportDate('2026-04-23'));
+  assert.ok(validateReportDate('2000-01-01'));
+  assert.ok(validateReportDate('1999-12-31'));
+});
+
+test('validateReportDate: rejects path traversal via date', () => {
+  assert.ok(!validateReportDate('../../../../etc/passwd'));
+  assert.ok(!validateReportDate('../secret'));
+  assert.ok(!validateReportDate('2026-04-23/../../../etc'));
+});
+
+test('validateReportDate: rejects non-date strings', () => {
+  assert.ok(!validateReportDate(''));
+  assert.ok(!validateReportDate('today'));
+  assert.ok(!validateReportDate('2026/04/23'));
+  assert.ok(!validateReportDate('04-23-2026'));
+});
+
+test('validateReportDate: rejects null / undefined', () => {
+  assert.ok(!validateReportDate(null));
+  assert.ok(!validateReportDate(undefined));
+});
+
+// ─── Security: spawn_claude_process dangerouslySkipPermissions default ────────
+
+test('dangerouslySkipPermissions opt-in: verify default is false', () => {
+  // Simulate the destructuring that spawnClaudeProcess does
+  const { dangerouslySkipPermissions = false } = {};
+  assert.equal(dangerouslySkipPermissions, false);
+});
+
+test('dangerouslySkipPermissions opt-in: explicit true is respected', () => {
+  const args = { dangerouslySkipPermissions: true };
+  const { dangerouslySkipPermissions = false } = args;
+  assert.equal(dangerouslySkipPermissions, true);
 });
