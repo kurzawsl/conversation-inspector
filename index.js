@@ -286,7 +286,8 @@ class ConversationInspectorServer {
               maxTurns: { type: 'number', description: 'Maximum agentic turns (default: 10)', default: 10 },
               systemPrompt: { type: 'string', description: 'Optional system prompt to append' },
               workingDirectory: { type: 'string', description: 'Working directory for execution' },
-              name: { type: 'string', description: 'Optional friendly name for this process' }
+              name: { type: 'string', description: 'Optional friendly name for this process' },
+              dangerouslySkipPermissions: { type: 'boolean', description: 'Pass --dangerously-skip-permissions to claude (opt-in, default: false)' }
             },
             required: ['prompt']
           }
@@ -673,7 +674,7 @@ class ConversationInspectorServer {
   // ═══════════════════════════════════════════════════════════════════════════════
 
   async spawnClaudeProcess(args) {
-    const { prompt, maxTurns = 10, systemPrompt, workingDirectory, name } = args;
+    const { prompt, maxTurns = 10, systemPrompt, workingDirectory, name, dangerouslySkipPermissions = false } = args;
 
     if (!prompt) {
       throw new Error('Missing required parameter: prompt');
@@ -683,11 +684,11 @@ class ConversationInspectorServer {
     const claudeProcess = new ClaudeProcess(processId, prompt, { maxTurns, systemPrompt, workingDirectory });
 
     // Build command
-    const cmdArgs = [
-      '--dangerously-skip-permissions',
-      '--mcp-config', MCP_CONFIG,
-      '--max-turns', maxTurns.toString(),
-    ];
+    const cmdArgs = [];
+    if (dangerouslySkipPermissions) {
+      cmdArgs.push('--dangerously-skip-permissions');
+    }
+    cmdArgs.push('--mcp-config', MCP_CONFIG, '--max-turns', maxTurns.toString());
 
     if (systemPrompt) {
       cmdArgs.push('--append-system-prompt', systemPrompt);
@@ -2314,6 +2315,15 @@ class ConversationInspectorServer {
   async saveDailyReport(args) {
     const { date } = args;
     const targetDate = date || new Date().toISOString().split('T')[0];
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: 'Invalid date: must match YYYY-MM-DD' }, null, 2)
+        }]
+      };
+    }
 
     const statsResult = await this.getDailyStatistics({ date: targetDate });
     const stats = JSON.parse(statsResult.content[0].text);
