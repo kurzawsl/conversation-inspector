@@ -13,6 +13,14 @@ import path from 'path';
 import os from 'os';
 import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
+import {
+  formatDuration,
+  parseJsonlLines,
+  extractToolCallsFromMessages,
+  estimateTokens as estimateTokensFn,
+  calculateSimilarityScore,
+  classifyTaskType,
+} from './lib/session-utils.js';
 
 const execAsync = promisify(exec);
 
@@ -74,15 +82,7 @@ class ClaudeProcess {
 // HELPER FUNCTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function formatDuration(ms) {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-
-  if (hours > 0) return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
-  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
-  return `${seconds}s`;
-}
+// formatDuration is imported from ./lib/session-utils.js
 
 function generateProcessId() {
   return `cp_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
@@ -119,36 +119,12 @@ async function findRecentSessionFile(afterTime) {
 
 async function parseJsonlFile(filePath) {
   const content = await fs.readFile(filePath, 'utf-8');
-  const lines = content.trim().split('\n').filter(l => l.trim());
-  return lines.map(line => {
-    try {
-      return JSON.parse(line);
-    } catch (e) {
-      return null;
-    }
-  }).filter(Boolean);
+  return parseJsonlLines(content);
 }
 
 async function getToolCallsFromSession(filePath) {
   const messages = await parseJsonlFile(filePath);
-  const toolCalls = [];
-
-  for (const msg of messages) {
-    if (msg.type === 'assistant' && msg.message?.content) {
-      for (const item of msg.message.content) {
-        if (item.type === 'tool_use') {
-          toolCalls.push({
-            tool: item.name,
-            id: item.id,
-            input: item.input,
-            timestamp: msg.timestamp
-          });
-        }
-      }
-    }
-  }
-
-  return toolCalls;
+  return extractToolCallsFromMessages(messages);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1328,21 +1304,18 @@ class ConversationInspectorServer {
 
           // Calculate similarity score
           const compTools = new Set(toolCalls.map(tc => tc.tool));
-          const toolOverlap = [...refTools].filter(t => compTools.has(t)).length;
-          const toolSimilarity = toolOverlap / Math.max(refTools.size, compTools.size, 1);
 
           const userMsgs = messages.filter(m => m.type === 'user');
           const prompt = userMsgs[0]?.message?.content;
           const promptText = typeof prompt === 'string' ? prompt :
             (prompt?.[0]?.text || '').toLowerCase();
 
-          // Simple word overlap for prompt similarity
           const refWords = new Set(refPromptText.split(/\s+/));
           const compWords = new Set(promptText.split(/\s+/));
-          const wordOverlap = [...refWords].filter(w => compWords.has(w)).length;
-          const promptSimilarity = wordOverlap / Math.max(refWords.size, compWords.size, 1);
 
-          const score = (toolSimilarity * 0.6) + (promptSimilarity * 0.4);
+          const score = calculateSimilarityScore(refTools, refWords, compTools, compWords);
+          const toolSimilarity = [...refTools].filter(t => compTools.has(t)).length / Math.max(refTools.size, compTools.size, 1);
+          const promptSimilarity = [...refWords].filter(w => compWords.has(w)).length / Math.max(refWords.size, compWords.size, 1);
 
           if (score > 0.2) {
             similar.push({
@@ -1438,11 +1411,7 @@ class ConversationInspectorServer {
               const text = typeof content === 'string' ? content.toLowerCase() :
                 (content?.[0]?.text || '').toLowerCase();
 
-              if (text.includes('review') || text.includes('check')) insights.taskTypes.codeReview++;
-              else if (text.includes('fix') || text.includes('bug') || text.includes('error')) insights.taskTypes.bugFix++;
-              else if (text.includes('add') || text.includes('create') || text.includes('implement')) insights.taskTypes.newFeature++;
-              else if (text.includes('find') || text.includes('search') || text.includes('what')) insights.taskTypes.research++;
-              else insights.taskTypes.other++;
+              insights.taskTypes[classifyTaskType(text)]++;
             }
           }
 
@@ -1493,8 +1462,7 @@ class ConversationInspectorServer {
   // ═══════════════════════════════════════════════════════════════════════════════
 
   estimateTokens(text) {
-    if (!text) return 0;
-    return Math.ceil(text.length / 4);
+    return estimateTokensFn(text);
   }
 
   async findSessionFile(sessionId) {
