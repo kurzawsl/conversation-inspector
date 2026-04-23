@@ -24,6 +24,17 @@ import {
 
 const execAsync = promisify(exec);
 
+// Surface process-level errors so they land in Claude Code logs instead of silently
+// killing the stdio transport.
+process.on('uncaughtException', (err) => {
+  console.error(JSON.stringify({ type: 'uncaughtException', error: err?.stack || String(err), ts: new Date().toISOString() }));
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error(JSON.stringify({ type: 'unhandledRejection', reason: reason instanceof Error ? reason.stack : String(reason), ts: new Date().toISOString() }));
+  process.exit(1);
+});
+
 const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 const STATS_DIR = path.join(os.homedir(), '.claude', 'stats');
 const CLAUDE_PATH = path.join(os.homedir(), '.claude', 'local', 'claude');
