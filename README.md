@@ -1,8 +1,15 @@
 # conversation-inspector
 
+[![CI](https://github.com/kurzawsl/conversation-inspector/actions/workflows/ci.yml/badge.svg)](https://github.com/kurzawsl/conversation-inspector/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 An MCP server that reads and analyzes local Claude session JSONL files — list sessions, search content, estimate tokens, classify tasks, compare sessions.
 
 Claude Code stores every conversation as JSONL files under `~/.claude/projects/`. This server exposes those files as structured MCP tools so you can query your own session history from within any Claude conversation.
+
+## Prerequisites
+
+- Node.js 20+
 
 ## Installation
 
@@ -68,6 +75,30 @@ The server reads JSONL files from `~/.claude/projects/` (or the path set in the 
 - **`get_process_output`** — Get the full output of a completed `claude -p` process.
 - **`kill_process`** — Kill a running `claude -p` process.
 - **`list_all_processes`** — List all processes (running and completed) with history.
+
+### Example: generate a work summary
+
+Request:
+```json
+{
+  "tool": "generate_work_summary",
+  "arguments": { "date": "2026-04-23" }
+}
+```
+
+Response:
+```
+Work Summary — 2026-04-23
+Sessions: 4  |  Total turns: 87  |  Tools called: 214
+
+Top tools: Bash (91), Read (43), Edit (38), Write (22), Grep (20)
+
+Projects worked on:
+  • /home/user/myapp — refactored auth module, added JWT refresh
+  • /home/user/scripts — automated backup rotation script
+
+Estimated tokens: ~142,000
+```
 
 ## Development
 
